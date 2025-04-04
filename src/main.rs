@@ -1,6 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::io::{Error, ErrorKind};
 use std::str::FromStr;
+use warp::Filter;
 
 #[derive(Debug, Clone)]
 struct QuestionId(String);
@@ -54,12 +55,9 @@ impl FromStr for QuestionId {
     }
 }
 
-fn main() {
-    let question = Question::new(
-        QuestionId::from_str("1").expect("No id provided"),
-        "1st Question".to_string(),
-        "Content of question".to_string(),
-        Some(vec!["faq".to_string()]),
-    );
-    println!("{}", question);
+#[tokio::main]
+async fn main() {
+    let hello = warp::get().map(|| format!("Hello, World!"));
+
+    warp::serve(hello).run(([127, 0, 0, 1], 3030)).await;
 }
