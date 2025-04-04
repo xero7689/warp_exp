@@ -9,10 +9,10 @@ pub struct QuestionId(pub String);
 
 #[derive(Debug, Serialize)]
 pub struct Question {
-    id: QuestionId,
-    title: String,
-    content: String,
-    tags: Option<Vec<String>>,
+    pub id: QuestionId,
+    pub title: String,
+    pub content: String,
+    pub tags: Option<Vec<String>>,
 }
 
 impl Question {
