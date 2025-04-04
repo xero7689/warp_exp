@@ -2,10 +2,12 @@ use std::fmt::{Display, Formatter};
 use std::io::{Error, ErrorKind};
 use std::str::FromStr;
 
-#[derive(Debug, Clone)]
-pub struct QuestionId(String);
+use serde::Serialize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize)]
+pub struct QuestionId(pub String);
+
+#[derive(Debug, Serialize)]
 pub struct Question {
     id: QuestionId,
     title: String,
@@ -14,7 +16,12 @@ pub struct Question {
 }
 
 impl Question {
-    fn new(id: QuestionId, title: String, content: String, tags: Option<Vec<String>>) -> Question {
+    pub fn new(
+        id: QuestionId,
+        title: String,
+        content: String,
+        tags: Option<Vec<String>>,
+    ) -> Question {
         Question {
             id,
             title,
