@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Formatter;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use warp::reject::Reject;
 use warp::{http::Method, http::StatusCode, Filter, Rejection, Reply}; // Bring the Filter trait to scope for using `map`
@@ -62,7 +64,7 @@ async fn get_questions(
 
     if !params.is_empty() {
         let pagination = extract_pagniation(params)?;
-        let res: Vec<Question> = store.questions.values().cloned().collect();
+        let res: Vec<Question> = store.questions.read().await.values().cloned().collect();
 
         // Check pagination size with length of vector
         if pagination.end > res.len() {
@@ -72,14 +74,14 @@ async fn get_questions(
         let res = &res[pagination.start..pagination.end];
         Ok(warp::reply::json(&res))
     } else {
-        let res: Vec<Question> = store.questions.values().cloned().collect();
+        let res: Vec<Question> = store.questions.read().await.values().cloned().collect();
         Ok(warp::reply::json(&res))
     }
 }
 
 #[derive(Clone)]
 struct Store {
-    questions: HashMap<QuestionId, Question>,
+    questions: Arc<RwLock<HashMap<QuestionId, Question>>>,
 }
 
 impl Store {
@@ -90,8 +92,8 @@ impl Store {
 
     fn new() -> Self {
         Store {
-            //questions: Arc::new(RwLock::new(Self::init())),
-            questions: Self::init(),
+            questions: Arc::new(RwLock::new(Self::init())),
+            //questions: Self::init(),
         }
     }
 }
