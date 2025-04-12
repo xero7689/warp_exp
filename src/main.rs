@@ -1,138 +1,12 @@
-use std::collections::HashMap;
-use std::fmt::Formatter;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use warp::{http::Method, Filter}; // Bring the Filter trait to scope for using `map`
+use handle_errors::return_error;
 
-use warp::reject::Reject;
-use warp::{http::Method, http::StatusCode, Filter, Rejection, Reply}; // Bring the Filter trait to scope for using `map`
-use warp_exp::question::{Question, QuestionId};
-
-#[derive(Debug)]
-enum Error {
-    ParseError(std::num::ParseIntError),
-    MissingParameters,
-    RangeError,
-}
-
-// You must implement the Reject Trait, to match the Result of Error type which implemented Rejection
-impl Reject for Error {}
-
-#[derive(Debug)]
-struct Pagniation {
-    start: usize,
-    end: usize,
-}
-
-fn extract_pagniation(params: HashMap<String, String>) -> Result<Pagniation, Error> {
-    if params.contains_key("start") && params.contains_key("end") {
-        return Ok(Pagniation {
-            start: params
-                .get("start")
-                .unwrap()
-                .parse::<usize>()
-                .map_err(Error::ParseError)?,
-            end: params
-                .get("end")
-                .unwrap()
-                .parse::<usize>()
-                .map_err(Error::ParseError)?,
-        });
-    }
-
-    Err(Error::MissingParameters)
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            Error::ParseError(ref err) => {
-                write!(f, "Cannot parse parameter: {}", err)
-            }
-            Error::MissingParameters => write!(f, "Missing parameter"),
-            Error::RangeError => write!(f, "Range error"),
-        }
-    }
-}
-
-async fn get_questions(
-    params: HashMap<String, String>,
-    store: Store,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Some(n) = params.get("start") {
-        println!("{:?}", n.parse::<usize>().expect("Couldn't parse start"));
-    }
-
-    if !params.is_empty() {
-        let pagination = extract_pagniation(params)?;
-        let res: Vec<Question> = store.questions.read().await.values().cloned().collect();
-
-        // Check pagination size with length of vector
-        if pagination.end > res.len() {
-            return Err(Error::RangeError.into());
-        }
-
-        let res = &res[pagination.start..pagination.end];
-        Ok(warp::reply::json(&res))
-    } else {
-        let res: Vec<Question> = store.questions.read().await.values().cloned().collect();
-        Ok(warp::reply::json(&res))
-    }
-}
-
-async fn add_questions(
-    store: Store,
-    question: Question,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    store
-        .questions
-        .write()
-        .await
-        .insert(question.id.clone(), question);
-
-    Ok(warp::reply::with_status("Question Added", StatusCode::OK))
-}
-
-#[derive(Clone)]
-struct Store {
-    questions: Arc<RwLock<HashMap<QuestionId, Question>>>,
-}
-
-impl Store {
-    fn init() -> HashMap<QuestionId, Question> {
-        let file = include_str!("../questions.json");
-        serde_json::from_str(file).expect("can't read questions.json")
-    }
-
-    fn new() -> Self {
-        Store {
-            questions: Arc::new(RwLock::new(Self::init())),
-            //questions: Self::init(),
-        }
-    }
-}
-
-async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
-    if let Some(error) = r.find::<Error>() {
-        Ok(warp::reply::with_status(
-            error.to_string(),
-            StatusCode::RANGE_NOT_SATISFIABLE,
-        ))
-    } else if let Some(error) = r.find::<warp::cors::CorsForbidden>() {
-        Ok(warp::reply::with_status(
-            error.to_string(),
-            StatusCode::FORBIDDEN,
-        ))
-    } else {
-        Ok(warp::reply::with_status(
-            "Route not found".to_string(),
-            StatusCode::NOT_FOUND,
-        ))
-    }
-}
-
+mod routes;
+mod store;
+mod types;
 #[tokio::main]
 async fn main() {
-    let store = Store::new();
+    let store = store::Store::new();
     let store_filter = warp::any().map(move || store.clone());
 
     let cors = warp::cors()
@@ -145,16 +19,36 @@ async fn main() {
         .and(warp::path::end())
         .and(warp::query())
         .and(store_filter.clone())
-        .and_then(get_questions);
+        .and_then(routes::question::get_questions);
 
-    let add_questions = warp::post()
+    let add_question = warp::post()
         .and(warp::path("questions"))
         .and(warp::path::end())
         .and(store_filter.clone())
         .and(warp::body::json())
-        .and_then(add_questions);
+        .and_then(routes::question::add_question);
 
-    let routes = get_questions.or(add_questions).with(cors).recover(return_error);
+    let update_question = warp::put()
+        .and(warp::path("questions"))
+        .and(warp::path::param::<String>()) // Add a string parameter ex: /questions/1234.
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(routes::question::update_question);
+
+    let delete_question = warp::delete()
+        .and(warp::path("questions"))
+        .and(warp::path::param::<String>())
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and_then(routes::question::delete_question);
+
+    let routes = get_questions
+        .or(add_question)
+        .or(update_question)
+        .or(delete_question)
+        .with(cors)
+        .recover(return_error);
 
     warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
 }

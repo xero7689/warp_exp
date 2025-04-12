@@ -1,5 +1,3 @@
-use std::fmt::{Display, Formatter};
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -11,15 +9,4 @@ pub struct Question {
     pub title: String,
     pub content: String,
     pub tags: Option<Vec<String>>,
-}
-
-
-impl Display for Question {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(
-            f,
-            "[{:?}]\ttitle: {}, content: {}, tags: {:?}",
-            self.id, self.title, self.content, self.tags
-        )
-    }
 }
