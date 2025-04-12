@@ -1,5 +1,5 @@
-use warp::http::StatusCode;
 use std::collections::HashMap;
+use warp::http::StatusCode;
 
 use crate::store::Store;
 use crate::types::pagination::extract_pagniation;
@@ -16,8 +16,7 @@ pub async fn get_questions(
 
     if !params.is_empty() {
         let pagination = extract_pagniation(params)?;
-        let res: Vec<Question> =
-            store.questions.read().await.values().cloned().collect();
+        let res: Vec<Question> = store.questions.read().await.values().cloned().collect();
 
         // Check pagination size with length of vector
         if pagination.end > res.len() {
@@ -61,7 +60,10 @@ pub async fn update_question(
     ))
 }
 
-pub async fn delete_question(id: String, store: Store) -> Result<impl warp::Reply, warp::Rejection> {
+pub async fn delete_question(
+    id: String,
+    store: Store,
+) -> Result<impl warp::Reply, warp::Rejection> {
     match store.questions.write().await.remove(&QuestionId(id)) {
         Some(_) => Ok(warp::reply::with_status("Question Deleted", StatusCode::OK)),
         None => Err(warp::reject::custom(Error::QuestionNotFound)),

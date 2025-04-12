@@ -1,5 +1,5 @@
-use warp::{http::Method, Filter}; // Bring the Filter trait to scope for using `map`
 use handle_errors::return_error;
+use warp::{http::Method, Filter}; // Bring the Filter trait to scope for using `map`
 
 mod routes;
 mod store;
