@@ -9,13 +9,17 @@ use handle_errors::Error;
 pub async fn get_questions(
     params: HashMap<String, String>,
     store: Store,
+    id: String,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    log::info!("{} Start querying questions", id);
     if let Some(n) = params.get("start") {
         println!("{:?}", n.parse::<usize>().expect("Couldn't parse start"));
     }
 
     if !params.is_empty() {
         let pagination = extract_pagniation(params)?;
+        log::info!("{} Pagination set {:?}", id, &pagination);
+
         let res: Vec<Question> = store.questions.read().await.values().cloned().collect();
 
         // Check pagination size with length of vector
@@ -26,6 +30,7 @@ pub async fn get_questions(
         let res = &res[pagination.start..pagination.end];
         Ok(warp::reply::json(&res))
     } else {
+        log::info!("{} Not pagination used!", id);
         let res: Vec<Question> = store.questions.read().await.values().cloned().collect();
         Ok(warp::reply::json(&res))
     }
