@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: warp-exp
+  labels:
+    app: warp-exp
+spec:
+  containers:
+    - name: warp-exp
+      image: xero7689/warp_exp
+      ports:
+        - containerPort: 3030
