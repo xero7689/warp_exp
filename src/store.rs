@@ -4,7 +4,7 @@ use tokio::sync::RwLock;
 
 use crate::types::question::{Question, QuestionId};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Store {
     pub questions: Arc<RwLock<HashMap<QuestionId, Question>>>,
 }
