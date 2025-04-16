@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
-pub struct QuestionId(pub String);
+pub struct QuestionId(pub i32);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Question {
