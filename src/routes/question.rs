@@ -20,13 +20,13 @@ pub async fn get_questions(
         pagination = extract_pagniation(params)?;
     }
 
-    info!(pagniation = false);
+    tracing::info!(pagination = ?pagination);
     let res: Vec<Question> = match store
         .get_questions(pagination.limit, pagination.offset)
         .await
     {
         Ok(res) => res,
-        Err(e) => return Err(warp::reject::custom(Error::DatabaseQueryError)),
+        Err(_) => return Err(warp::reject::custom(Error::DatabaseQueryError)),
     };
     Ok(warp::reply::json(&res))
 }
@@ -35,7 +35,7 @@ pub async fn add_question(
     store: Store,
     new_question: NewQuestion,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Err(e) = store.add_question(new_question).await {
+    if let Err(_) = store.add_question(new_question).await {
         return Err(warp::reject::custom(Error::DatabaseQueryError));
     };
 
@@ -49,14 +49,14 @@ pub async fn update_question(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let res = match store.update_question(question, id).await {
         Ok(res) => res,
-        Err(e) => return Err(warp::reject::custom(Error::DatabaseQueryError)),
+        Err(_) => return Err(warp::reject::custom(Error::DatabaseQueryError)),
     };
 
     Ok(warp::reply::json(&res))
 }
 
 pub async fn delete_question(id: i32, store: Store) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Err(e) = store.delete_question(id).await {
+    if let Err(_) = store.delete_question(id).await {
         return Err(warp::reject::custom(Error::DatabaseQueryError));
     };
 

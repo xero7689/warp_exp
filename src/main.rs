@@ -10,7 +10,20 @@ async fn main() {
     let log_filter =
         std::env::var("RUST_LOG").unwrap_or_else(|_| "warp_exp=info,warp=error".to_owned());
 
-    let store = store::Store::new("postgres://localhost:5432/warp_exp").await;
+    let postgres_user = std::env::var("POSTGRES_USER").unwrap_or_else(|_| "postgres".to_owned());
+
+    let postgres_pwd = std::env::var("POSTGRES_PWD").unwrap_or_else(|_| "postgres".to_owned());
+
+    let postgres_db = std::env::var("POSTGRES_DB").unwrap_or_else(|_| "postgres".to_owned());
+
+    let store = store::Store::new(
+        format!(
+            "postgres://{}:{}@localhost:5432/{}",
+            postgres_user, postgres_pwd, postgres_db
+        )
+        .as_str(),
+    )
+    .await;
     let store_filter = warp::any().map(move || store.clone());
 
     tracing_subscriber::fmt()
