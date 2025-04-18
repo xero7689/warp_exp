@@ -8,6 +8,7 @@ pub enum Error {
     MissingParameters,
     RangeError,
     QuestionNotFound,
+    DatabaseQueryError,
 }
 
 impl std::fmt::Display for Error {
@@ -19,6 +20,9 @@ impl std::fmt::Display for Error {
             Error::MissingParameters => write!(f, "Missing parameter"),
             Error::RangeError => write!(f, "Range error"),
             Error::QuestionNotFound => write!(f, "Question Not Found"),
+            Error::DatabaseQueryError => {
+                write!(f, "Query couldn't be executed")
+            }
         }
     }
 }
