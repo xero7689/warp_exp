@@ -24,6 +24,13 @@ async fn main() {
         .as_str(),
     )
     .await;
+
+    // Do SQL Migration whenever the server startup
+    sqlx::migrate!()
+        .run(&store.clone().connection)
+        .await
+        .expect("Cannot migrate Database");
+
     let store_filter = warp::any().map(move || store.clone());
 
     tracing_subscriber::fmt()
