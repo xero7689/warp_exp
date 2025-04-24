@@ -21,6 +21,8 @@ sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "postgres", "migra
 
 rand = "0.8"
 rust-argon2 = "1.0"
+paseto = "2.0"
+chrono = "0.4.19"
 
 # local sub crate
 handle-errors = { path = "handle-errors" }

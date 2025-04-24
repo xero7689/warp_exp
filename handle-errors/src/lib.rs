@@ -1,8 +1,9 @@
+use argon2::Error as ArgonError;
 use std::fmt::Formatter;
 use warp::reject::Reject;
 use warp::{filters::body::BodyDeserializeError, http::StatusCode, Rejection, Reply}; // Bring the Filter trait to scope for using `map`
 
-use tracing::{event, instrument, Level};
+use tracing::{event, Level};
 
 #[derive(Debug)]
 pub enum Error {
@@ -11,6 +12,8 @@ pub enum Error {
     RangeError,
     QuestionNotFound,
     DatabaseQueryError(sqlx::Error),
+    WrongPassword,
+    ArgonLibraryError(ArgonError),
 }
 
 impl std::fmt::Display for Error {
@@ -24,6 +27,12 @@ impl std::fmt::Display for Error {
             Error::QuestionNotFound => write!(f, "Question Not Found"),
             Error::DatabaseQueryError(_) => {
                 write!(f, "Query couldn't be executed")
+            }
+            Error::WrongPassword => {
+                write!(f, "Wrong Password")
+            }
+            Error::ArgonLibraryError(_) => {
+                write!(f, "Can't verify password")
             }
         }
     }
@@ -44,7 +53,6 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
                         "Account already exists".to_string(),
                         StatusCode::UNPROCESSABLE_ENTITY,
                     ))
-
                 } else {
                     Ok(warp::reply::with_status(
                         "Cannot update data".to_string(),
@@ -66,6 +74,12 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
         Ok(warp::reply::with_status(
             error.to_string(),
             StatusCode::UNPROCESSABLE_ENTITY,
+        ))
+    } else if let Some(crate::Error::WrongPassword) = r.find() {
+        event!(Level::ERROR, "Enter Wrong password");
+        Ok(warp::reply::with_status(
+            "Wrong E-Mail/Password combination".to_string(),
+            StatusCode::UNAUTHORIZED,
         ))
     } else {
         println! {"{:?}", r};

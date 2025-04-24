@@ -7,3 +7,4 @@ edition = "2021"
 warp = "0.3"
 sqlx = { version = "0.5" }
 tracing = { version = "0.1", features = ["log"] }
+rust-argon2 = "1.0"
