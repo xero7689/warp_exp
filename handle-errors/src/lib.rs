@@ -14,6 +14,8 @@ pub enum Error {
     DatabaseQueryError(sqlx::Error),
     WrongPassword,
     ArgonLibraryError(ArgonError),
+    CannotDecrptToken,
+    Unauthorized,
 }
 
 impl std::fmt::Display for Error {
@@ -33,6 +35,12 @@ impl std::fmt::Display for Error {
             }
             Error::ArgonLibraryError(_) => {
                 write!(f, "Can't verify password")
+            }
+            Error::CannotDecrptToken => {
+                write!(f, "Cannot decrypt token")
+            }
+            Error::Unauthorized => {
+                write!(f, "Request is unauthorized")
             }
         }
     }
@@ -79,6 +87,12 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
         event!(Level::ERROR, "Enter Wrong password");
         Ok(warp::reply::with_status(
             "Wrong E-Mail/Password combination".to_string(),
+            StatusCode::UNAUTHORIZED,
+        ))
+    } else if let Some(crate::Error::Unauthorized) = r.find() {
+        event!(Level::ERROR, "Not matching account id");
+        Ok(warp::reply::with_status(
+            "No permission to change underlying resource".to_string(),
             StatusCode::UNAUTHORIZED,
         ))
     } else {

@@ -28,6 +28,21 @@ impl Store {
         }
     }
 
+    pub async fn is_question_owner(&self, id: i32, account_id: &AccountId) -> Result<bool, Error> {
+        match sqlx::query("SELECT * FROM questions WHERE id = $1 AND account_id = $2")
+            .bind(id)
+            .bind(account_id.0)
+            .fetch_optional(&self.connection)
+            .await
+        {
+            Ok(question) => Ok(question.is_some()),
+            Err(e) => {
+                tracing::event!(tracing::Level::ERROR, "{:?}", e);
+                Err(Error::DatabaseQueryError(e))
+            }
+        }
+    }
+
     pub async fn get_questions(
         &self,
         limit: Option<u32>,
@@ -53,15 +68,20 @@ impl Store {
         }
     }
 
-    pub async fn add_question(&self, new_question: NewQuestion) -> Result<Question, Error> {
+    pub async fn add_question(
+        &self,
+        new_question: NewQuestion,
+        account_id: AccountId,
+    ) -> Result<Question, Error> {
         match sqlx::query(
-            "INSERT INTO questions (title, content, tags)
-            VALUES ($1, $2, $3)
+            "INSERT INTO questions (title, content, tags, account_id)
+            VALUES ($1, $2, $3, $4)
             RETURNING id, title, content, tags",
         )
         .bind(new_question.title)
         .bind(new_question.content)
         .bind(new_question.tags)
+        .bind(account_id.0)
         .map(|row: PgRow| Question {
             id: QuestionId(row.get("id")),
             title: row.get("title"),
@@ -116,8 +136,12 @@ impl Store {
         }
     }
 
-    pub async fn add_answer(&self, new_answer: NewAnswer) -> Result<Answer, Error> {
-        match sqlx::query("INSERT INTO answers (content, question_id) VALUES ($1, $2) RETURNING id, question_id, content").bind(new_answer.content).bind(new_answer.question_id.0).map(|row: PgRow| Answer {
+    pub async fn add_answer(
+        &self,
+        new_answer: NewAnswer,
+        account_id: AccountId,
+    ) -> Result<Answer, Error> {
+        match sqlx::query("INSERT INTO answers (content, question_id, account_id) VALUES ($1, $2, $3) RETURNING id, question_id, content").bind(new_answer.content).bind(new_answer.question_id.0).bind(account_id.0).map(|row: PgRow| Answer {
             id: AnswerId(row.get("id")),
             content: row.get("content"),
             question_id: QuestionId(row.get("question_id"))}).fetch_one(&self.connection).await{
