@@ -12,7 +12,7 @@ pub struct Store {
 }
 
 impl Store {
-    pub async fn new(db_url: &str) -> Self {
+    pub async fn new(db_url: &str) -> Result<Self, sqlx::Error> {
         let db_pool = match PgPoolOptions::new()
             .max_connections(5)
             .connect(db_url)
@@ -23,9 +23,9 @@ impl Store {
                 panic!("Couldn't establish connection to database: {}", e);
             }
         };
-        Store {
+        Ok(Store {
             connection: db_pool,
-        }
+        })
     }
 
     pub async fn is_question_owner(&self, id: i32, account_id: &AccountId) -> Result<bool, Error> {
@@ -179,7 +179,7 @@ impl Store {
         }
     }
 
-    pub async fn get_account(self, email: String) -> Result<Account, Error> {
+    pub async fn get_account(&self, email: String) -> Result<Account, Error> {
         match sqlx::query("SELECT * from accounts where email = $1")
             .bind(email)
             .map(|row: PgRow| Account {
@@ -197,6 +197,25 @@ impl Store {
             Err(error) => {
                 tracing::event!(tracing::Level::ERROR, "{:?}", error);
                 Err(Error::DatabaseQueryError(error))
+            }
+        }
+    }
+
+    pub async fn reset_password(
+        &self,
+        account: Account,
+        hashed_password: String,
+    ) -> Result<(), Error> {
+        match sqlx::query("UPDATE accounts SET password = $1 WHERE email = $2")
+            .bind(hashed_password)
+            .bind(account.email)
+            .fetch_optional(&self.connection)
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                tracing::event!(tracing::Level::ERROR, "{:?}", e);
+                Err(Error::DatabaseQueryError(e))
             }
         }
     }

@@ -1,12 +1,27 @@
+use dotenv;
 use handle_errors::return_error;
+use std::env;
 use tracing_subscriber::fmt::format::FmtSpan;
 use warp::{http::Method, Filter}; // Bring the Filter trait to scope for using `map`
 
 mod routes;
 mod store;
 mod types;
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), handle_errors::Error> {
+    dotenv::dotenv().ok();
+
+    if let Err(_) = env::var("PASETO_KEY") {
+        panic!("PASETO key not set!")
+    }
+
+    let port = std::env::var("PORT")
+        .ok()
+        .map(|val| val.parse::<u16>())
+        .unwrap_or(Ok(8080))
+        .map_err(|e| handle_errors::Error::ParseError(e))?;
+
     let log_filter =
         std::env::var("RUST_LOG").unwrap_or_else(|_| "warp_exp=info,warp=error".to_owned());
 
@@ -23,13 +38,14 @@ async fn main() {
         )
         .as_str(),
     )
-    .await;
+    .await
+    .map_err(|e| handle_errors::Error::DatabaseQueryError(e))?;
 
     // Do SQL Migration whenever the server startup
     sqlx::migrate!()
         .run(&store.clone().connection)
         .await
-        .expect("Cannot migrate Database");
+        .map_err(|e| handle_errors::Error::MigrationError(e))?;
 
     let store_filter = warp::any().map(move || store.clone());
 
@@ -97,6 +113,13 @@ async fn main() {
         .and(warp::body::json())
         .and_then(routes::authentication::login);
 
+    let reset_password = warp::post()
+        .and(warp::path("reset-password"))
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(routes::authentication::reset_password);
+
     let routes = get_questions
         .or(add_question)
         .or(update_question)
@@ -104,9 +127,12 @@ async fn main() {
         .or(add_answer)
         .or(registration)
         .or(login)
+        .or(reset_password)
         .with(cors)
         .with(warp::trace::request())
         .recover(return_error);
 
-    warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+    warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+
+    Ok(())
 }

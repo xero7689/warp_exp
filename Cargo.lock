@@ -2615,6 +2615,7 @@ name = "warp_exp"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "dotenv",
  "env_logger",
  "handle-errors",
  "log",

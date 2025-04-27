@@ -16,6 +16,7 @@ pub enum Error {
     ArgonLibraryError(ArgonError),
     CannotDecrptToken,
     Unauthorized,
+    MigrationError(sqlx::migrate::MigrateError),
 }
 
 impl std::fmt::Display for Error {
@@ -41,6 +42,9 @@ impl std::fmt::Display for Error {
             }
             Error::Unauthorized => {
                 write!(f, "Request is unauthorized")
+            }
+            Error::MigrationError(_) => {
+                write!(f, "Error when doing migration")
             }
         }
     }
