@@ -1,12 +1,27 @@
+use dotenv;
 use handle_errors::return_error;
+use std::env;
 use tracing_subscriber::fmt::format::FmtSpan;
 use warp::{http::Method, Filter}; // Bring the Filter trait to scope for using `map`
 
 mod routes;
 mod store;
 mod types;
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), handle_errors::Error> {
+    dotenv::dotenv().ok();
+
+    if let Err(_) = env::var("PASETO_KEY") {
+        panic!("PASETO key not set!")
+    }
+
+    let port = std::env::var("PORT")
+        .ok()
+        .map(|val| val.parse::<u16>())
+        .unwrap_or(Ok(8080))
+        .map_err(|e| handle_errors::Error::ParseError(e))?;
+
     let log_filter =
         std::env::var("RUST_LOG").unwrap_or_else(|_| "warp_exp=info,warp=error".to_owned());
 
@@ -16,14 +31,30 @@ async fn main() {
 
     let postgres_db = std::env::var("POSTGRES_DB").unwrap_or_else(|_| "postgres".to_owned());
 
+    let postgres_port = std::env::var("POSTGRES_PORT")
+        .ok()
+        .map(|val| val.parse::<u16>())
+        .unwrap_or(Ok(5432))
+        .map_err(|e| handle_errors::Error::ParseError(e))?;
+
+    let postgres_host = std::env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".to_owned());
+
     let store = store::Store::new(
         format!(
-            "postgres://{}:{}@localhost:5432/{}",
-            postgres_user, postgres_pwd, postgres_db
+            "postgres://{}:{}@{}:{}/{}",
+            postgres_user, postgres_pwd, postgres_host, postgres_port, postgres_db
         )
         .as_str(),
     )
-    .await;
+    .await
+    .map_err(|e| handle_errors::Error::DatabaseQueryError(e))?;
+
+    // Do SQL Migration whenever the server startup
+    sqlx::migrate!()
+        .run(&store.clone().connection)
+        .await
+        .map_err(|e| handle_errors::Error::MigrationError(e))?;
+
     let store_filter = warp::any().map(move || store.clone());
 
     tracing_subscriber::fmt()
@@ -41,20 +72,13 @@ async fn main() {
         .and(warp::path::end())
         .and(warp::query())
         .and(store_filter.clone())
-        .and_then(routes::question::get_questions)
-        .with(warp::trace(|info| {
-            tracing::info_span!(
-                "get_questions request",
-                    method= %info.method(),
-                    path = %info.path(),
-                    id = %uuid::Uuid::new_v4(),
-            )
-        }));
+        .and_then(routes::question::get_questions);
 
     let add_question = warp::post()
         .and(warp::path("questions"))
         .and(warp::path::end())
         .and(store_filter.clone())
+        .and(routes::authentication::auth())
         .and(warp::body::json())
         .and_then(routes::question::add_question);
 
@@ -62,6 +86,7 @@ async fn main() {
         .and(warp::path("questions"))
         .and(warp::path::param::<i32>()) // Add a string parameter ex: /questions/1234.
         .and(warp::path::end())
+        .and(routes::authentication::auth())
         .and(store_filter.clone())
         .and(warp::body::json())
         .and_then(routes::question::update_question);
@@ -70,24 +95,55 @@ async fn main() {
         .and(warp::path("questions"))
         .and(warp::path::param::<i32>())
         .and(warp::path::end())
+        .and(routes::authentication::auth())
         .and(store_filter.clone())
         .and_then(routes::question::delete_question);
 
     let add_answer = warp::post()
         .and(warp::path("answers"))
         .and(warp::path::end())
+        .and(routes::authentication::auth())
         .and(store_filter.clone())
         .and(warp::body::form())
         .and_then(routes::answer::add_answer);
+
+    let registration = warp::post()
+        .and(warp::path("registration"))
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(routes::authentication::register);
+
+    let login = warp::post()
+        .and(warp::path("login"))
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(routes::authentication::login);
+
+    let reset_password = warp::post()
+        .and(warp::path("reset-password"))
+        .and(warp::path::end())
+        .and(store_filter.clone())
+        .and(warp::body::json())
+        .and_then(routes::authentication::reset_password);
 
     let routes = get_questions
         .or(add_question)
         .or(update_question)
         .or(delete_question)
         .or(add_answer)
+        .or(registration)
+        .or(login)
+        .or(reset_password)
         .with(cors)
         .with(warp::trace::request())
         .recover(return_error);
 
-    warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+    let app_ver = std::env::var("WARP_EXP_VERSION").expect("No App version found");
+    tracing::info!("Q&A Service build ID {}", app_ver);
+
+    warp::serve(routes).run(([0, 0, 0, 0], port)).await;
+
+    Ok(())
 }

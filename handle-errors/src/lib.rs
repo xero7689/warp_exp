@@ -1,6 +1,9 @@
+use argon2::Error as ArgonError;
 use std::fmt::Formatter;
 use warp::reject::Reject;
 use warp::{filters::body::BodyDeserializeError, http::StatusCode, Rejection, Reply}; // Bring the Filter trait to scope for using `map`
+
+use tracing::{event, Level};
 
 #[derive(Debug)]
 pub enum Error {
@@ -8,7 +11,12 @@ pub enum Error {
     MissingParameters,
     RangeError,
     QuestionNotFound,
-    DatabaseQueryError,
+    DatabaseQueryError(sqlx::Error),
+    WrongPassword,
+    ArgonLibraryError(ArgonError),
+    CannotDecrptToken,
+    Unauthorized,
+    MigrationError(sqlx::migrate::MigrateError),
 }
 
 impl std::fmt::Display for Error {
@@ -20,8 +28,23 @@ impl std::fmt::Display for Error {
             Error::MissingParameters => write!(f, "Missing parameter"),
             Error::RangeError => write!(f, "Range error"),
             Error::QuestionNotFound => write!(f, "Question Not Found"),
-            Error::DatabaseQueryError => {
+            Error::DatabaseQueryError(_) => {
                 write!(f, "Query couldn't be executed")
+            }
+            Error::WrongPassword => {
+                write!(f, "Wrong Password")
+            }
+            Error::ArgonLibraryError(_) => {
+                write!(f, "Can't verify password")
+            }
+            Error::CannotDecrptToken => {
+                write!(f, "Cannot decrypt token")
+            }
+            Error::Unauthorized => {
+                write!(f, "Request is unauthorized")
+            }
+            Error::MigrationError(_) => {
+                write!(f, "Error when doing migration")
             }
         }
     }
@@ -30,12 +53,30 @@ impl std::fmt::Display for Error {
 // You must implement the Reject Trait, to match the Result of Error type which implemented Rejection
 impl Reject for Error {}
 
+const DUPLICATE_KEY: u32 = 23505;
+
 pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
-    if let Some(error) = r.find::<Error>() {
-        Ok(warp::reply::with_status(
-            error.to_string(),
-            StatusCode::RANGE_NOT_SATISFIABLE,
-        ))
+    if let Some(crate::Error::DatabaseQueryError(e)) = r.find() {
+        event!(Level::ERROR, "Database query error");
+        match e {
+            sqlx::Error::Database(err) => {
+                if err.code().unwrap().parse::<u32>().unwrap() == DUPLICATE_KEY {
+                    Ok(warp::reply::with_status(
+                        "Account already exists".to_string(),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                    ))
+                } else {
+                    Ok(warp::reply::with_status(
+                        "Cannot update data".to_string(),
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                    ))
+                }
+            }
+            _ => Ok(warp::reply::with_status(
+                "Cannot update data".to_string(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+            )),
+        }
     } else if let Some(error) = r.find::<warp::cors::CorsForbidden>() {
         Ok(warp::reply::with_status(
             error.to_string(),
@@ -45,6 +86,18 @@ pub async fn return_error(r: Rejection) -> Result<impl Reply, Rejection> {
         Ok(warp::reply::with_status(
             error.to_string(),
             StatusCode::UNPROCESSABLE_ENTITY,
+        ))
+    } else if let Some(crate::Error::WrongPassword) = r.find() {
+        event!(Level::ERROR, "Enter Wrong password");
+        Ok(warp::reply::with_status(
+            "Wrong E-Mail/Password combination".to_string(),
+            StatusCode::UNAUTHORIZED,
+        ))
+    } else if let Some(crate::Error::Unauthorized) = r.find() {
+        event!(Level::ERROR, "Not matching account id");
+        Ok(warp::reply::with_status(
+            "No permission to change underlying resource".to_string(),
+            StatusCode::UNAUTHORIZED,
         ))
     } else {
         println! {"{:?}", r};
