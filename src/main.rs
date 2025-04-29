@@ -31,10 +31,18 @@ async fn main() -> Result<(), handle_errors::Error> {
 
     let postgres_db = std::env::var("POSTGRES_DB").unwrap_or_else(|_| "postgres".to_owned());
 
+    let postgres_port = std::env::var("POSTGRES_PORT")
+        .ok()
+        .map(|val| val.parse::<u16>())
+        .unwrap_or(Ok(5432))
+        .map_err(|e| handle_errors::Error::ParseError(e))?;
+
+    let postgres_host = std::env::var("POSTGRES_HOST").unwrap_or_else(|_| "localhost".to_owned());
+
     let store = store::Store::new(
         format!(
-            "postgres://{}:{}@localhost:5432/{}",
-            postgres_user, postgres_pwd, postgres_db
+            "postgres://{}:{}@{}:{}/{}",
+            postgres_user, postgres_pwd, postgres_host, postgres_port, postgres_db
         )
         .as_str(),
     )
@@ -132,7 +140,10 @@ async fn main() -> Result<(), handle_errors::Error> {
         .with(warp::trace::request())
         .recover(return_error);
 
-    warp::serve(routes).run(([127, 0, 0, 1], port)).await;
+    let app_ver = std::env::var("WARP_EXP_VERSION").expect("No App version found");
+    tracing::info!("Q&A Service build ID {}", app_ver);
+
+    warp::serve(routes).run(([0, 0, 0, 0], port)).await;
 
     Ok(())
 }

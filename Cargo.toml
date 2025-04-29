@@ -28,3 +28,6 @@ dotenv = "0.15.0"
 # local sub crate
 handle-errors = { path = "handle-errors" }
 
+
+[build-dependencies]
+platforms = "2.0.0"
