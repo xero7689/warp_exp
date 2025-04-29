@@ -1,18 +1,27 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  warp-exp-postgres:
+  database:
     image: postgres:14.4
     container_name: postgres_db
     restart: always
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+    env_file:
+      - .env
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    depends_on:
+      - database
+    networks:
+      - default
+    ports:
+      - "8080:8080"
 
 volumes:
   postgres_data:

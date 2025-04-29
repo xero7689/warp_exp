@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use tracing::{event, info, instrument, Level};
+use tracing::{instrument, Level};
 use warp::http::StatusCode;
 
 use crate::store::Store;
+use crate::types::account::Session;
 use crate::types::pagination::{extract_pagniation, Pagination};
-use crate::types::question::{NewQuestion, Question, QuestionId};
-use handle_errors::Error;
+use crate::types::question::{NewQuestion, Question};
 
 #[instrument]
 pub async fn get_questions(
@@ -26,42 +26,59 @@ pub async fn get_questions(
         .await
     {
         Ok(res) => res,
-        Err(_) => return Err(warp::reject::custom(Error::DatabaseQueryError)),
+        Err(e) => return Err(warp::reject::custom(e)),
     };
     Ok(warp::reply::json(&res))
 }
 
 pub async fn add_question(
     store: Store,
+    session: Session,
     new_question: NewQuestion,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Err(_) = store.add_question(new_question).await {
-        return Err(warp::reject::custom(Error::DatabaseQueryError));
-    };
+    let account_id = session.account_id;
 
-    Ok(warp::reply::with_status("Question Added", StatusCode::OK))
+    match store.add_question(new_question, account_id).await {
+        Ok(question) => Ok(warp::reply::json(&question)),
+        Err(e) => Err(warp::reject::custom(e)),
+    }
 }
 
 pub async fn update_question(
     id: i32,
+    session: Session,
     store: Store,
     question: Question,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let res = match store.update_question(question, id).await {
-        Ok(res) => res,
-        Err(_) => return Err(warp::reject::custom(Error::DatabaseQueryError)),
-    };
+    let account_id = session.account_id;
 
-    Ok(warp::reply::json(&res))
+    if store.is_question_owner(id, &account_id).await? {
+        let res = match store.update_question(question, id).await {
+            Ok(res) => res,
+            Err(e) => return Err(warp::reject::custom(e)),
+        };
+        Ok(warp::reply::json(&res))
+    } else {
+        Err(warp::reject::custom(handle_errors::Error::Unauthorized))
+    }
 }
 
-pub async fn delete_question(id: i32, store: Store) -> Result<impl warp::Reply, warp::Rejection> {
-    if let Err(_) = store.delete_question(id).await {
-        return Err(warp::reject::custom(Error::DatabaseQueryError));
-    };
+pub async fn delete_question(
+    id: i32,
+    session: Session,
+    store: Store,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let account_id = session.account_id;
+    if store.is_question_owner(id, &account_id).await? {
+        if let Err(e) = store.delete_question(id).await {
+            return Err(warp::reject::custom(e));
+        };
 
-    Ok(warp::reply::with_status(
-        format!("Question {} Deleted", id),
-        StatusCode::OK,
-    ))
+        Ok(warp::reply::with_status(
+            format!("Question {} Deleted", id),
+            StatusCode::OK,
+        ))
+    } else {
+        Err(warp::reject::custom(handle_errors::Error::Unauthorized))
+    }
 }
